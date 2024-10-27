@@ -15,6 +15,7 @@ services:
       - "5000:5000"
     volumes:
       - ./detector/app/temp:/app/temp
+      - ./detector/app/model:/app/model
     networks:
       - my_network
     depends_on:

@@ -2,12 +2,13 @@ from flask import Flask, request, jsonify
 import os
 import pika
 import threading
-from PIL import Image
 import requests
 import json
 from tenacity import retry, wait_exponential, stop_after_attempt
+from detector import Detector
 
 app = Flask(__name__)
+detector = Detector()
 
 # Retry connection to RabbitMQ
 @retry(wait=wait_exponential(multiplier=1, min=4, max=10), stop=stop_after_attempt(10))
@@ -42,19 +43,6 @@ def detect():
 
     return jsonify({"status": "Image received and queued"}), 200
 
-def calculate(image_path):
-    print(f"Processing image: {image_path}")
-    # Create two copies of the image
-    image = Image.open(image_path)
-    image_name, ext = os.path.splitext(image_path)
-    image_1_path = f"{image_name}_1{ext}"
-    image_2_path = f"{image_name}_2{ext}"
-    image.save(image_1_path)
-    image.save(image_2_path)
-    print(f"Image copies created: {image_1_path}, {image_2_path}")
-
-    return image_1_path, image_2_path
-
 def process_queue():
     channel = connect_to_rabbitmq()
     for method_frame, properties, body in channel.consume('detection_queue'):
@@ -63,15 +51,10 @@ def process_queue():
         print(f"Processing message from queue: {image_filename}, {user_id}")
 
         # Process the image
-        image_1_path, image_2_path = calculate(image_path)
+        image_1_path, image_2_path = detector.calculate(image_path)
 
         # Send result to tg_bot
         with open(image_1_path, 'rb') as img1, open(image_2_path, 'rb') as img2:
-            # response = requests.post(f"http://tg_bot:5001/send_result", files={
-            #     'image_1': img1,
-            #     'image_2': img2,
-            #     'json': ('json', json.dumps({"user_id": user_id}))
-            # })
             response = requests.post("http://tg_bot:5001/send_result", files={'image_1': img1, 'image_2': img2}, data={'user_id': user_id})
             print(f"Response from tg_bot: {response.status_code}")
 
